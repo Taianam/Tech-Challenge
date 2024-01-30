@@ -3,6 +3,7 @@ package br.com.sistemadeparquimetro.DDD.dominio.service;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
+import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.text.DecimalFormat;
@@ -38,7 +39,6 @@ public class RegistroTempoService {
 	@Autowired
 	private Mailler mailler;
 
-	
 	RegistroTempoDTO registroTempoDTO = new RegistroTempoDTO();
 
 	public RegistroTempoDTO buscarTempoPorId(Long id) {
@@ -66,74 +66,81 @@ public class RegistroTempoService {
 			return this.registroTempoDTO.coverterEntidadeEmDto(tempoSalvo);
 		}
 	}
-	
-	 public byte[] exportarRecibo(Long id) {
-		 var registroTempo = buscarTempoPorId(id);
-		 DecimalFormat df = new DecimalFormat("0.00");
-		 DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-		 File file = null;
 
-		 try {
-			 Duration duration = Duration.between(registroTempo.getHorarioInicio(), registroTempo.getHorariofim());
+	public byte[] exportarRecibo(Long id) {
+		var registroTempo = buscarTempoPorId(id);
+		DecimalFormat df = new DecimalFormat("0.00");
+		DateTimeFormatter dtf = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+		File file = null;
 
-		 file = File.createTempFile("relatorio", ".txt");
+		try {
+			Duration duration = Duration.between(registroTempo.getHorarioInicio(), registroTempo.getHorariofim());
 
-		 var output = new OutputStreamWriter( new FileOutputStream(file), StandardCharsets.UTF_8);
+			file = File.createTempFile("relatorio", ".txt");
 
-		 StringBuilder sb = new StringBuilder();
+			var output = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
 
-		 sb.append("Recibo Parquimetro  " + dtf.format(LocalDate.now()));
-		 sb.append("Total de horas");
-		 sb.append("\r\n");
-		 sb.append(duration.toHoursPart()+":" +duration.toMinutesPart());		 
-		 sb.append("\r\n");
-		 sb.append("Tarifa: 3 reais a hora");	
-		 sb.append("\r\n");
-		 sb.append("Valor PAGO");
-		 sb.append("\r\n");
-		 sb.append(df.format(duration.toMinutesPart()<=30? duration.toHoursPart() * 3: duration.toHoursPart() + 1* 3));
-		 sb.append("\r\n");
-		 sb.append("Obrigada pela preferencia");
+			StringBuilder sb = new StringBuilder();
 
-		 output.write(sb.toString());
+			sb.append("Recibo Parquimetro  " + dtf.format(LocalDate.now()));
+			sb.append("Total de horas");
+			sb.append("\r\n");
+			sb.append(duration.toHoursPart() + ":" + duration.toMinutesPart());
+			sb.append("\r\n");
+			sb.append("Tarifa: 3 reais a hora");
+			sb.append("\r\n");
+			sb.append("Valor PAGO");
+			sb.append("\r\n");
+			sb.append(df.format(
+					duration.toMinutesPart() <= 30 ? duration.toHoursPart() * 3 : duration.toHoursPart() + 1 * 3));
+			sb.append("\r\n");
+			sb.append("Obrigada pela preferencia");
 
-		 output.close();
+			output.write(sb.toString());
 
-		 var arquivo = new ByteArrayResource(Files.readAllBytes(file.toPath())).getByteArray();
+			output.close();
 
-		 return arquivo;
-		
+			var arquivo = new ByteArrayResource(Files.readAllBytes(file.toPath())).getByteArray();
 
-		 } catch (Exception e) {
-		 return null;
+			return arquivo;
 
-		 } finally {
-		 file.delete();
-		 }
+		} catch (Exception e) {
+			return null;
 
-		 }
-	 
-	 public String notificarPorEmail(Long id) {
+		} finally {
+			file.delete();
+		}
 
-		 
-		 	var registroTempo =  buscarTempoPorId(id);
-		 	var veiculo = veiculoRepository.findById(registroTempo.getVeiculoId());	
-		 	
-			var verificarEmail = condutorRepository.findById(veiculo.get().getCondutor_id());
-				
-				if (verificarEmail.isEmpty()){
-					
-					return "Email invalido!";		
-				}else {
-					
-					var mensagem = "Relatorio por email";
-					var enviar = new MenssagemEmail("Parquimetro", mensagem, Arrays.asList(verificarEmail.get().getEmail()));
-					mailler.enviar(enviar);
-					return "Email enviado com sucesso, verefique sua caixa de email!";
-				}
-					
-					
+	}
+
+	public String notificarPorEmail(Long id) {
+
+		var registroTempo = buscarTempoPorId(id);
+		var veiculo = veiculoRepository.findById(registroTempo.getVeiculoId());
+
+		var verificarEmail = condutorRepository.findById(veiculo.get().getCondutor_id());
+
+		if (verificarEmail.isEmpty()) {
+
+			return "Email invalido!";
+		} else {
+
+			var mensagem = exportarRecibo(id);
+			MenssagemEmail enviar;
+			try {
+				enviar = new MenssagemEmail("Parquimetro", new String(mensagem, "UTF-8"),
+						Arrays.asList(verificarEmail.get().getEmail()));
+
+				mailler.enviar(enviar);
+			} catch (UnsupportedEncodingException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
 			}
+
+			return "Email enviado com sucesso, verefique sua caixa de email!";
+		}
+
+	}
 
 	public void deleteById(Long id) {
 		registroTempoRepository.deleteById(id);
